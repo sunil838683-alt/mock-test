@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HP Mock Tests</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <style>
+    body { background:#f2f5f7; font-family: 'Segoe UI', sans-serif; }
+    .container-box { max-width:900px; margin: 20px auto; }
+    .hide { display:none; }
+    .banner {
+      background:#fff3cd; padding:12px; border-radius:10px;
+      margin-bottom:20px; border:1px solid #ffeeba;
+    }
+    .option { cursor:pointer; padding:12px; border-radius:8px; border:1px solid #ddd; margin-bottom:8px; }
+    .option:hover { background:#eef5ff; }
+    .selected { border:2px solid #007bff !important; background:#e8f0ff !important; }
+    #quiz-room { margin-top:20px; }
+  </style>
+</head>
+
+<body>
+<div class="container container-box">
+  <div class="card p-4 shadow-sm">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="m-0">HP Mock Tests</h3>
+      <div id="user-area"></div>
+    </div>
+
+    <!-- Banner / Notice -->
+    <div id="notice-banner" class="banner">
+      <strong>अब अपनी तैयारी को खुद परखो!</strong><br>
+      हर दिन HP बोर्ड लेवल के टेस्ट दो — ज्ञान बढ़ाओ, हौसला मजबूत करो।<br>
+      पटवारी, JOA, पुलिस, कंडक्टर जैसी परीक्षाओं के लिए अनुभवी शिक्षकों द्वारा तैयार।<br>
+      <strong>टेस्ट की कीमत सिर्फ एक रिवॉर्ड ऐड है।</strong> 🚀✨
+    </div>
+
+    <!-- AUTH AREA -->
+    <div id="auth-area">
+      <div class="row">
+        <div class="col-md-6">
+          <h5>Signup</h5>
+          <input id="signup-name" class="form-control mb-2" placeholder="नाम" />
+          <input id="signup-email" class="form-control mb-2" placeholder="Email" />
+          <input id="signup-pass" type="password" class="form-control mb-2" placeholder="Password" />
+          <button id="btn-signup" class="btn btn-primary w-100">Sign Up</button>
+        </div>
+        <div class="col-md-6">
+          <h5>Login</h5>
+          <input id="login-email" class="form-control mb-2" placeholder="Email" />
+          <input id="login-pass" type="password" class="form-control mb-2" placeholder="Password" />
+          <button id="btn-login" class="btn btn-success w-100">Login</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- APP AREA -->
+    <div id="app-area" class="hide">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong id="welcome-name"></strong>
+        <div>
+          <button id="btn-logout" class="btn btn-outline-danger btn-sm me-2">Logout</button>
+          <button id="btn-admin" class="btn btn-warning btn-sm hide">Admin Panel</button>
+        </div>
+      </div>
+
+      <!-- QUIZ LIST -->
+      <div id="quizzes-list">
+        <h5>Available Mock Tests</h5>
+        <div id="quizzes-container" class="list-group"></div>
+      </div>
+
+      <!-- QUIZ ROOM -->
+      <div id="quiz-room" class="hide">
+        <button id="back-to-list" class="btn btn-link">&larr; Back</button>
+        <h4 id="quiz-title"></h4>
+
+        <div id="question-area" class="mt-3"></div>
+
+        <div class="mt-3">
+          <button id="prev-q" class="btn btn-secondary me-2">Prev</button>
+          <button id="next-q" class="btn btn-primary me-2">Next</button>
+          <button id="submit-quiz" class="btn btn-success me-2">Submit</button>
+          <button id="leave-quiz" class="btn btn-outline-danger">Leave Quiz</button>
+        </div>
+      </div>
+
+
+      <!-- ADMIN AREA -->
+      <div id="admin-area" class="hide mt-4">
+        <hr />
+        <h5>Create Quiz</h5>
+        <input id="admin-quiz-title" placeholder="Quiz Title" class="form-control mb-2">
+        <input id="admin-quiz-duration" placeholder="Duration (minutes)" class="form-control mb-2">
+        <input id="admin-quiz-total" placeholder="Total Questions" class="form-control mb-2">
+        <button id="admin-create-quiz" class="btn btn-primary w-100">Create Quiz</button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- JS -->
+<script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+  // ⭐ CHANGE THESE TWO VALUES ⭐
+  const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+  const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";
+
+  const ADMIN_EMAIL = "sunil838683@gmail.com";
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const authArea = document.getElementById('auth-area');
+  const appArea = document.getElementById('app-area');
+  const quizzesList = document.getElementById('quizzes-list');
+  const quizRoom = document.getElementById('quiz-room');
+
+  const welcomeName = document.getElementById('welcome-name');
+  const quizzesContainer = document.getElementById('quizzes-container');
+  const quizTitleEl = document.getElementById('quiz-title');
+  const questionArea = document.getElementById('question-area');
+
+  let session = null;
+  let questions = [];
+  let answers = {};
+  let currentQuiz = null;
+  let index = 0;
+
+  //-------------------------------------------------
+  // INITIAL SESSION CHECK
+  //-------------------------------------------------
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    session = data.session;
+
+    supabase.auth.onAuthStateChange((_event, sess) => {
+      session = sess?.session || null;
+      if (session) loggedIn();
+      else loggedOut();
+    });
+
+    if (session) loggedIn();
+    else loggedOut();
+  })();
+
+  //-------------------------------------------------
+  // AUTH FUNCTIONS
+  //-------------------------------------------------
+  document.getElementById('btn-signup').onclick = async () => {
+    const name = signup-name.value;
+    const email = signup-email.value;
+    const pass = signup-pass.value;
+
+    let { error } = await supabase.auth.signUp({
+      email,
+      password: pass,
+      options: { data: { name } }
+    });
+
+    if (error) return alert(error.message);
+    alert("Signup successful. Now login.");
+  };
+
+  document.getElementById('btn-login').onclick = async () => {
+    const email = login-email.value;
+    const pass = login-pass.value;
+
+    let { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass
+    });
+
+    if (error) return alert(error.message);
+  };
+
+  document.getElementById('btn-logout').onclick = async () => {
+    await supabase.auth.signOut();
+  };
+
+  //-------------------------------------------------
+  // LOGIN HANDLER
+  //-------------------------------------------------
+  async function loggedIn() {
+    authArea.classList.add('hide');
+    appArea.classList.remove('hide');
+
+    const user = session.user;
+    welcomeName.textContent = user.email;
+
+    if (user.email === ADMIN_EMAIL) btn-admin.classList.remove('hide');
+    else btn-admin.classList.add('hide');
+
+    loadQuizzes();
+  }
+
+  function loggedOut() {
+    appArea.classList.add('hide');
+    authArea.classList.remove('hide');
+  }
+
+  //-------------------------------------------------
+  // LOAD QUIZZES
+  //-------------------------------------------------
+  async function loadQuizzes() {
+    quizzesContainer.innerHTML = "Loading...";
+    
+    const { data } = await supabase
+      .from("quizzes")
+      .select("*")
+      .eq("published", true)
+      .order("created_at", { ascending:false });
+
+    quizzesContainer.innerHTML = "";
+
+    data?.forEach(q => {
+      let div = document.createElement("div");
+      div.className = "list-group-item d-flex justify-content-between align-items-center";
+      div.innerHTML = `
+        <div>
+          <strong>${q.title}</strong><br>
+          <small>${q.total_questions} Questions • ${q.duration_minutes} min</small>
+        </div>
+        <button class="btn btn-primary btn-sm" data-id="${q.id}">Start</button>
+      `;
+      div.querySelector("button").onclick = () => startQuiz(q.id);
+      quizzesContainer.appendChild(div);
+    });
+  }
+
+  //-------------------------------------------------
+  // START QUIZ
+  //-------------------------------------------------
+  async function startQuiz(id) {
+    const { data: quiz } = await supabase.from("quizzes").select("*").eq("id", id).single();
+    const { data: qns } = await supabase.from("quiz_questions").select("*").eq("quiz_id", id);
+
+    if (!qns.length) return alert("No questions found!");
+
+    currentQuiz = quiz;
+    questions = qns;
+    answers = {};
+    index = 0;
+
+    quizzesList.classList.add("hide");
+    quizRoom.classList.remove("hide");
+
+    quizTitleEl.textContent = quiz.title;
+
+    renderQuestion();
+  }
+
+  //-------------------------------------------------
+  // SHOW QUESTION
+  //-------------------------------------------------
+  function renderQuestion() {
+    const q = questions[index];
+
+    questionArea.innerHTML = `
+      <h5>Q${index+1}. ${q.question}</h5>
+
+      ${optionHTML("A", q.option_a)}
+      ${optionHTML("B", q.option_b)}
+      ${optionHTML("C", q.option_c)}
+      ${optionHTML("D", q.option_d)}
+    `;
+
+    // restore selection
+    if (answers[q.id]) {
+      document.querySelector(`[data-opt="${answers[q.id]}"]`)?.classList.add("selected");
+    }
+
+    document.querySelectorAll(".option").forEach(o => {
+      o.onclick = () => {
+        const opt = o.dataset.opt;
+        answers[q.id] = opt;
+
+        document.querySelectorAll(".option").forEach(x => x.classList.remove("selected"));
+        o.classList.add("selected");
+      };
+    });
+  }
+
+  function optionHTML(letter, text) {
+    return `<div class="option" data-opt="${letter}"><strong>${letter}.</strong> ${text}</div>`;
+  }
+
+  //-------------------------------------------------
+  // QUIZ CONTROLS
+  //-------------------------------------------------
+  prev-q.onclick = () => {
+    if (index > 0) { index--; renderQuestion(); }
+  };
+
+  next-q.onclick = () => {
+    if (index < questions.length-1) { index++; renderQuestion(); }
+  };
+
+  submit-quiz.onclick = submitQuiz;
+  leave-quiz.onclick = () => {
+    if (confirm("Leave quiz?")) {
+      quizRoom.classList.add("hide");
+      quizzesList.classList.remove("hide");
+    }
+  };
+
+  back-to-list.onclick = () => {
+    quizRoom.classList.add("hide");
+    quizzesList.classList.remove("hide");
+  };
+
+  //-------------------------------------------------
+  // SUBMIT QUIZ
+  //-------------------------------------------------
+  async function submitQuiz() {
+    let score = 0;
+    questions.forEach(q => {
+      if (answers[q.id] && answers[q.id] === q.correct_option) score++;
+    });
+
+    const percent = Math.round((score / questions.length) * 100);
+    let msg = "";
+
+    if (percent < 50) msg = `😟 और मेहनत करने की ज़रूरत है। Score: ${percent}%`;
+    else if (percent < 80) msg = `🙂 अच्छी प्रगति है। Score: ${percent}%`;
+    else msg = `🎉 शानदार! Score: ${percent}%`;
+
+    alert(msg);
+
+    quizRoom.classList.add("hide");
+    quizzesList.classList.remove("hide");
+  }
+
+</script>
+
+</body>
+</html>
